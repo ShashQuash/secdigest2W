@@ -64,6 +64,8 @@ def normalize_entry(entry, feed):
         "language": feed.get("language", "en"),
         "tags": [],
         "cves": find_cves(f"{entry.get('title', '')} {raw_summary} {full_content}"),
+        "vendor": "",
+        "product": "",
     }
 
 def normalize_kev(vuln):
@@ -82,6 +84,8 @@ def normalize_kev(vuln):
         "language": "en",
         "tags": tags,
         "cves": [cve],
+        "vendor": vuln.get("vendorProject", ""),
+        "product": vuln.get("product", ""),
     }
 
 def fetch_kev():

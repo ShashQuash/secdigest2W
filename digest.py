@@ -48,12 +48,22 @@ def item_text(item):
     return f"{item['title']} {item['summary']}"
 
 
+def mentions_product(item, info):
+    text = item["title"].lower()
+    return any(name and name.lower() in text for name in (info["vendor"], info["product"]))
+
+
 def exploit_level(item, kev_cves):
-    if "kev" in item["tags"] or set(item["cves"]) & kev_cves:
+    if "kev" in item["tags"]:
+        return "exploit_confirmed"
+    matched = [kev_cves[cve] for cve in item["cves"] if cve in kev_cves]
+    if any(mentions_product(item, info) for info in matched):
         return "exploit_confirmed"
     text = item_text(item)
     if REPORTED_RE.search(text):
         return "exploit_reported"
+    if matched:
+        return "exploit_component"
     if AVAILABLE_RE.search(text):
         return "exploit_available"
     return None
@@ -73,7 +83,7 @@ def categorize(item, kev_cves):
 
 if __name__ == "__main__":
     store = load_store()
-    kev_cves = set(store["kev_cves"])
+    kev_cves = store["kev_cves"]
     all_items = list(store["items"].values())
     items = [item for item in all_items if not is_noise(item)]
     print(f"Skipped {len(all_items) - len(items)} noise items")
@@ -83,11 +93,16 @@ if __name__ == "__main__":
     print("Tag counts:", dict(counts))
     print("Untagged:", sum(1 for _, tags in tagged if not tags), "of", len(items))
 
-    print("\n-- News promoted to confirmed via KEV match --")
+    print("\n-- News items with a KEV CVE match --")
     for item, tags in tagged:
-        if "exploit_confirmed" in tags and item["source"] != "CISA KEV":
-            matched = sorted(set(item["cves"]) & kev_cves)
-            print(f"   [{item['source']}] {item['title'][:70]}  {matched}")
+        if item["source"] == "CISA KEV":
+            continue
+        matched = [cve for cve in item["cves"] if cve in kev_cves]
+        if not matched:
+            continue
+        level = next(t for t in tags if t.startswith("exploit_"))
+        products = sorted({f"{kev_cves[c]['vendor']} {kev_cves[c]['product']}" for c in matched})
+        print(f"   {level:18} [{item['source']}] {item['title'][:50]}  KEV: {products}")
 
     print("\n-- 8 untagged titles --")
     for item, tags in [t for t in tagged if not t[1]][:8]:
