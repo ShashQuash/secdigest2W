@@ -9,6 +9,7 @@ import requests
 
 CONFIG_FILE = "feeds.toml"
 HEADERS = {"User-Agent": "secdigest/0.1 (personal Discord security news digest)"}
+KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 
 TAG_RE = re.compile(r"<[^>]+>")
 SPACE_RE = re.compile(r"\s+")
@@ -54,8 +55,37 @@ def normalize_entry(entry, feed):
         "published": published.isoformat() if published else None,
         "source": feed["name"],
         "language": feed.get("language", "en"),
+        "tags": []
     }
 
+def normalize_kev(vuln):
+    cve = vuln["cveID"]
+    tags = ["kev"]
+    if vuln.get("knownRansomwareCampaignUse") == "Known":
+        tags.append("ransomware")
+    added = datetime.strptime(vuln["dateAdded"], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    return {
+        "id": f"{KEV_URL}|{cve}",
+        "title": f"{cve}: {vuln.get('vulnerabilityName', '').strip()}",
+        "link": f"https://nvd.nist.gov/vuln/detail/{cve}",
+        "summary": clean_summary(vuln.get("shortDescription", "")),
+        "published": added.isoformat(),
+        "source": "CISA KEV",
+        "language": "en",
+        "tags": tags,
+    }
+
+def fetch_kev():
+    try:
+        response = requests.get(KEV_URL, headers=HEADERS, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+    except (requests.RequestException, ValueError) as error:
+        print(f"[ERROR] CISA KEV: {type(error).__name__}: {error}")
+        return []
+    vulns = data.get("vulnerabilities", [])
+    print(f"[OK] CISA KEV: {len(vulns)} entries in catalog")
+    return [normalize_kev(v) for v in vulns]
 
 def fetch_all(feeds):
     items = []
