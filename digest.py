@@ -80,6 +80,31 @@ def categorize(item, kev_cves):
             tags.add(name)
     return tags
 
+def should_group(a, b):
+    cves_a, cves_b = set(a["cves"]), set(b["cves"])
+    if not cves_a or not cves_b:
+        return False
+    shared = cves_a & cves_b
+    return len(shared) / len(cves_a | cves_b) >= 0.5
+
+
+def group_items(items):
+    captain = list(range(len(items)))
+
+    def find(i):
+        while captain[i] != i:
+            i = captain[i]
+        return i
+
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            if should_group(items[i], items[j]):
+                captain[find(j)] = find(i)
+
+    groups = {}
+    for index, item in enumerate(items):
+        groups.setdefault(find(index), []).append(item)
+    return list(groups.values())
 
 if __name__ == "__main__":
     store = load_store()
@@ -107,3 +132,11 @@ if __name__ == "__main__":
     print("\n-- 8 untagged titles --")
     for item, tags in [t for t in tagged if not t[1]][:8]:
         print("  ", item["title"])
+
+    groups = group_items(items)
+    multi = [g for g in groups if len(g) > 1]
+    print(f"\n-- {len(items)} items formed {len(groups)} groups, {len(multi)} with more than one item --")
+    for group in sorted(multi, key=len, reverse=True):
+        print(f"\n   Group of {len(group)}:")
+        for item in group:
+                        print(f"     [{item['source']}] {item['title'][:60]}  {len(item['cves'])} CVEs {item['cves'][:3]}")
