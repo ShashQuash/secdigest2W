@@ -6,7 +6,7 @@ store_file = "store.json"
 keep_days = 14
 
 def empty_store():
-    return {"latest_digest": None, "items": {}}
+    return {"last_digest": None, "kev_cves": [], "items": {}}
 
 def load_store(path=store_file):
     if not os.path.exists(path):

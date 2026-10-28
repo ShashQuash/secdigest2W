@@ -15,6 +15,11 @@ TAG_RE = re.compile(r"<[^>]+>")
 SPACE_RE = re.compile(r"\s+")
 MAX_SUMMARY = 280
 
+CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,}\b", re.IGNORECASE)
+
+
+def find_cves(text):
+    return sorted({match.upper() for match in CVE_RE.findall(text or "")})
 
 def clean_summary(raw):
     text = TAG_RE.sub(" ", raw or "")
@@ -47,15 +52,18 @@ def to_utc(entry):
 def normalize_entry(entry, feed):
     published = to_utc(entry)
     raw_id = entry.get("id") or entry.get("link")
+    raw_summary = entry.get("summary", "")
+    full_content = " ".join(c.get("value", "") for c in entry.get("content", []))
     return {
         "id": f"{feed['url']}|{raw_id}",
         "title": entry.get("title", "").strip(),
         "link": entry.get("link", ""),
-        "summary": clean_summary(entry.get("summary", "")),
+        "summary": clean_summary(raw_summary),
         "published": published.isoformat() if published else None,
         "source": feed["name"],
         "language": feed.get("language", "en"),
-        "tags": []
+        "tags": [],
+        "cves": find_cves(f"{entry.get('title', '')} {raw_summary} {full_content}"),
     }
 
 def normalize_kev(vuln):
@@ -73,6 +81,7 @@ def normalize_kev(vuln):
         "source": "CISA KEV",
         "language": "en",
         "tags": tags,
+        "cves": [cve],
     }
 
 def fetch_kev():
