@@ -1,6 +1,7 @@
 import re
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from sources import load_feeds
 
 from store import load_store
 
@@ -63,6 +64,45 @@ CATEGORY_WORDS = (
 MAX_TITLES_FOR_RARE = 3
 MIN_SHARED_RARE = 2
 
+FIRST_DIGEST_DAYS = 4
+BACKLOG_SLACK_DAYS = 3
+
+
+def select_new(items, last_digest, now=None):
+    now = now or datetime.now(timezone.utc)
+    if last_digest:
+        since = datetime.fromisoformat(last_digest)
+        oldest_allowed = since - timedelta(days=BACKLOG_SLACK_DAYS)
+    else:
+        since = now - timedelta(days=FIRST_DIGEST_DAYS)
+        oldest_allowed = since
+    return [
+        item for item in items
+        if datetime.fromisoformat(item["first_seen"]) > since
+        and datetime.fromisoformat(item["published"]) > oldest_allowed
+    ]
+
+SECTIONS = [
+    ("exploit_confirmed", "✅ Known exploited (CISA KEV)"),
+    ("exploit_reported", "⚠️ Reported exploited"),
+    ("breach", "🔓 Breaches & ransomware"),
+    ("regulation", "📜 EU & German regulation"),
+    ("ai", "🤖 AI security"),
+    ("vulnerability", "🐛 Vulnerabilities"),
+    ("patch", "🩹 Patches"),
+    ("threats", "🎣 Threats & campaigns"),
+]
+
+
+def build_entry(group, kev_cves, source_rank):
+    tags = set()
+    for item in group:
+        tags |= categorize(item, kev_cves)
+    if tags & {"exploit_component", "exploit_available"}:
+        tags.add("vulnerability")
+    section = next((key for key, _ in SECTIONS if key in tags), None)
+    ordered = sorted(group, key=lambda i: (i["language"] != "en", source_rank.get(i["source"], 99)))
+    return {"section": section, "lead": ordered[0], "others": ordered[1:], "tags": tags, "size": len(group)}
 
 def title_words(item):
     words = {w.lower() for w in WORD_RE.findall(item["title"])}
@@ -185,3 +225,19 @@ if __name__ == "__main__":
         print(f"\n   Group of {len(group)}:")
         for item in group:
             print(f"     [{item['source']}] {item['title'][:55]}  cves={len(item['cves'])} rare={sorted(title_words(item) & rare)}")
+
+    print("\n========== DIGEST PREVIEW ==========")
+    source_rank = {feed["name"]: n for n, feed in enumerate(load_feeds())}
+    new_items = select_new(items, store["last_digest"])
+    entries = [build_entry(g, kev_cves, source_rank) for g in group_items(new_items)]
+    entries = [e for e in entries if e["section"]]
+    print(f"{len(new_items)} new items -> {len(entries)} digest entries")
+    for key, title in SECTIONS:
+        in_section = [e for e in entries if e["section"] == key]
+        if not in_section:
+            continue
+        print(f"\n{title}  ({len(in_section)})")
+        for entry in in_section:
+            others = ", ".join(sorted({i["source"] for i in entry["others"]}))
+            extra = f"  + {others}" if others else ""
+            print(f"   [{entry['lead']['source']}] {entry['lead']['title'][:70]}{extra}")
