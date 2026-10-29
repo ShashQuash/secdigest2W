@@ -153,7 +153,7 @@ def same_story_by_name(a, b, names_a, names_b):
     return gap <= timedelta(days=3)
 
 def is_noise(item):
-    return bool(SKIP_TITLE_RE.search(item["title"]))
+    return item.get("sponsored", False) or bool(SKIP_TITLE_RE.search(item["title"]))
 
 def item_text(item):
     return f"{item['title']} {item['summary']}"

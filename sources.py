@@ -41,6 +41,15 @@ def fetch_feed(url):
     response.raise_for_status()
     return feedparser.parse(response.content)
 
+def is_sponsored(url, marker):
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=15)
+        response.raise_for_status()
+    except requests.RequestException as error:
+        print(f"[WARN] sponsored check failed, showing item anyway: {type(error).__name__}")
+        return False
+    return marker.lower() in response.text.lower()
+
 
 def to_utc(entry):
     parsed = entry.get("published_parsed") or entry.get("updated_parsed")
@@ -66,6 +75,7 @@ def normalize_entry(entry, feed):
         "cves": find_cves(f"{entry.get('title', '')} {raw_summary} {full_content}"),
         "vendor": "",
         "product": "",
+        "sponsored": False,
     }
 
 def normalize_kev(vuln):

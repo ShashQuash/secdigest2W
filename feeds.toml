@@ -7,6 +7,7 @@ language = "en"
 name = "The Hacker News"
 url = "https://feeds.feedburner.com/TheHackersNews"
 language = "en"
+sponsored_marker = "contributed piece from one of our valued partners"
 
 [[feeds]]
 name = "CISA Advisories"
