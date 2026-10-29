@@ -38,7 +38,11 @@ AVAILABLE_RE = build_pattern(AVAILABLE_WORDS)
 PATTERNS = {name: build_pattern(words) for name, words in CATEGORIES.items()}
 
 SKIP_TITLE_RE = re.compile(
-    r"^CISA Adds .+ Known Exploited Vulnerabilit|^\W*Passwort\W* Folge \d+",
+    r"^CISA Adds .+ Known Exploited Vulnerabilit"
+    r"|^\W*Passwort\W* Folge \d+"
+    r"|^\W*Webinar:"
+    r"|^\W*Weekly Recap"
+    r"|^\W*ThreatsDay:",
     re.IGNORECASE,
 )
 
