@@ -63,6 +63,7 @@ CATEGORY_WORDS = (
 )
 MAX_TITLES_FOR_RARE = 3
 MIN_SHARED_RARE = 2
+MIN_NAME_TOKEN_LEN = 5
 
 FIRST_DIGEST_DAYS = 4
 BACKLOG_SLACK_DAYS = 3
@@ -92,17 +93,34 @@ SECTIONS = [
     ("patch", "🩹 Patches"),
     ("threats", "🎣 Threats & campaigns"),
 ]
+SECTION_ORDER = {key: n for n, (key, _) in enumerate(SECTIONS)}
+def section_rank(section):
+    if section is None:
+        return len(SECTIONS)
+    return SECTION_ORDER[section]
 
-
-def build_entry(group, kev_cves, source_rank):
-    tags = set()
-    for item in group:
-        tags |= categorize(item, kev_cves)
+def pick_section(tags):
+    tags = set(tags)
     if tags & {"exploit_component", "exploit_available"}:
         tags.add("vulnerability")
-    section = next((key for key, _ in SECTIONS if key in tags), None)
-    ordered = sorted(group, key=lambda i: (i["language"] != "en", source_rank.get(i["source"], 99)))
-    return {"section": section, "lead": ordered[0], "others": ordered[1:], "tags": tags, "size": len(group)}
+    return next((key for key, _ in SECTIONS if key in tags), None)
+
+def build_entry(group, kev_cves, source_rank):
+    item_tags = [categorize(item, kev_cves) for item in group]
+    all_tags = set().union(*item_tags)
+    section = pick_section(all_tags)
+
+    def lead_rank(pair):
+        item, tags = pair
+        own_section = pick_section(tags)
+        return (
+            section_rank(own_section),
+            item["language"] != "en",
+            source_rank.get(item["source"], 99),
+        )
+
+    ordered = [item for item, _ in sorted(zip(group, item_tags), key=lead_rank)]
+    return {"section": section, "lead": ordered[0], "others": ordered[1:], "tags": all_tags, "size": len(group)}
 
 def title_words(item):
     words = {w.lower() for w in WORD_RE.findall(item["title"])}
@@ -113,6 +131,22 @@ def title_words(item):
 def rare_words(items):
     counts = Counter(word for item in items for word in title_words(item))
     return {word for word, n in counts.items() if n <= MAX_TITLES_FOR_RARE}
+
+def name_tokens(item):
+    words = {w.lower() for w in WORD_RE.findall(item["title"])}
+    return {
+        w for w in words
+        if len(w) >= MIN_NAME_TOKEN_LEN
+        and any(c.isdigit() for c in w)
+        and any(c.isalpha() for c in w)
+    }
+
+
+def same_story_by_name(a, b, names_a, names_b):
+    if not (names_a & names_b):
+        return False
+    gap = abs(datetime.fromisoformat(a["published"]) - datetime.fromisoformat(b["published"]))
+    return gap <= timedelta(days=3)
 
 def is_noise(item):
     return bool(SKIP_TITLE_RE.search(item["title"]))
@@ -179,10 +213,13 @@ def group_items(items):
 
     rare = rare_words(items)
     words = [title_words(item) for item in items]
+    names = [name_tokens(item) for item in items]
     for i in range(len(items)):
         for j in range(i + 1, len(items)):
             a, b = items[i], items[j]
-            if same_story_by_cves(a, b) or same_story_by_words(a, b, words[i], words[j], rare):
+            if (same_story_by_cves(a, b)
+                    or same_story_by_words(a, b, words[i], words[j], rare)
+                    or same_story_by_name(a, b, names[i], names[j])):
                 captain[find(j)] = find(i)
 
     groups = {}
