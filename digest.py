@@ -35,6 +35,19 @@ def build_pattern(words):
 
 REPORTED_RE = build_pattern(REPORTED_WORDS)
 AVAILABLE_RE = build_pattern(AVAILABLE_WORDS)
+HYPOTHETICAL_RE = build_pattern([
+    "if", "could", "can", "may", "might", "would", "potentially",
+    "kann", "können", "könnte", "könnten", "wenn", "falls",
+])
+HYPOTHETICAL_WINDOW = 30
+
+def reports_exploitation(text):
+    for match in REPORTED_RE.finditer(text):
+        before = text[max(0, match.start() - HYPOTHETICAL_WINDOW):match.start()]
+        if not HYPOTHETICAL_RE.search(before):
+            return True
+    return False
+
 PATTERNS = {name: build_pattern(words) for name, words in CATEGORIES.items()}
 
 SKIP_TITLE_RE = re.compile(
@@ -171,7 +184,7 @@ def exploit_level(item, kev_cves):
     if any(mentions_product(item, info) for info in matched):
         return "exploit_confirmed"
     text = item_text(item)
-    if REPORTED_RE.search(text):
+    if reports_exploitation(text):
         return "exploit_reported"
     if matched:
         return "exploit_component"
