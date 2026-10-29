@@ -1,5 +1,6 @@
 import re
 from collections import Counter
+from datetime import datetime, timedelta
 
 from store import load_store
 
@@ -40,6 +41,38 @@ SKIP_TITLE_RE = re.compile(
     re.IGNORECASE,
 )
 
+WORD_RE = re.compile(r"[a-zA-ZäöüÄÖÜß0-9]+")
+STOPWORDS = {
+    "the", "and", "for", "with", "from", "that", "this", "into", "over", "after",
+    "new", "now", "more", "than", "how", "why", "what", "its", "can", "but", "via",
+    "der", "die", "das", "und", "für", "mit", "auf", "bei", "von", "aus", "wieder",
+    "auch", "nicht", "sondern", "nur", "version", "ist", "ins", "über",
+}
+GENERIC_WORDS = {
+    "million", "data", "users", "user", "attack", "attacks", "attacker", "attackers",
+    "hacker", "hackers", "hacking", "using", "used", "uses", "could", "other", "days",
+    "public", "online", "found", "exposed", "researchers", "security", "critical",
+    "gets", "web", "cvss", "cisa", "warns", "urges", "two", "five", "four",
+    "sicherheit", "angreifer", "angriffe",
+}
+CATEGORY_WORDS = (
+    {w for words in CATEGORIES.values() for w in words}
+    | set(REPORTED_WORDS)
+    | set(AVAILABLE_WORDS)
+)
+MAX_TITLES_FOR_RARE = 3
+MIN_SHARED_RARE = 2
+
+
+def title_words(item):
+    words = {w.lower() for w in WORD_RE.findall(item["title"])}
+    words = {w for w in words if len(w) >= 3 and not w.isdigit()}
+    return words - STOPWORDS - GENERIC_WORDS - CATEGORY_WORDS
+
+
+def rare_words(items):
+    counts = Counter(word for item in items for word in title_words(item))
+    return {word for word, n in counts.items() if n <= MAX_TITLES_FOR_RARE}
 
 def is_noise(item):
     return bool(SKIP_TITLE_RE.search(item["title"]))
@@ -80,12 +113,20 @@ def categorize(item, kev_cves):
             tags.add(name)
     return tags
 
-def should_group(a, b):
+def same_story_by_cves(a, b):
     cves_a, cves_b = set(a["cves"]), set(b["cves"])
     if not cves_a or not cves_b:
         return False
-    shared = cves_a & cves_b
-    return len(shared) / len(cves_a | cves_b) >= 0.5
+    return len(cves_a & cves_b) / len(cves_a | cves_b) >= 0.5
+
+
+def same_story_by_words(a, b, words_a, words_b, rare):
+    if a["source"] == b["source"]:
+        return False
+    if len(words_a & words_b & rare) < MIN_SHARED_RARE:
+        return False
+    gap = abs(datetime.fromisoformat(a["published"]) - datetime.fromisoformat(b["published"]))
+    return gap <= timedelta(days=3)
 
 
 def group_items(items):
@@ -96,9 +137,12 @@ def group_items(items):
             i = captain[i]
         return i
 
+    rare = rare_words(items)
+    words = [title_words(item) for item in items]
     for i in range(len(items)):
         for j in range(i + 1, len(items)):
-            if should_group(items[i], items[j]):
+            a, b = items[i], items[j]
+            if same_story_by_cves(a, b) or same_story_by_words(a, b, words[i], words[j], rare):
                 captain[find(j)] = find(i)
 
     groups = {}
@@ -134,9 +178,10 @@ if __name__ == "__main__":
         print("  ", item["title"])
 
     groups = group_items(items)
+    rare = rare_words(items)
     multi = [g for g in groups if len(g) > 1]
     print(f"\n-- {len(items)} items formed {len(groups)} groups, {len(multi)} with more than one item --")
     for group in sorted(multi, key=len, reverse=True):
         print(f"\n   Group of {len(group)}:")
         for item in group:
-                        print(f"     [{item['source']}] {item['title'][:60]}  {len(item['cves'])} CVEs {item['cves'][:3]}")
+            print(f"     [{item['source']}] {item['title'][:55]}  cves={len(item['cves'])} rare={sorted(title_words(item) & rare)}")
