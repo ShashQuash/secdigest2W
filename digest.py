@@ -9,8 +9,8 @@ REPORTED_WORDS = ["exploited", "exploiting", "in the wild", "zero-day", "0-day",
 AVAILABLE_WORDS = ["proof-of-concept", "proof of concept", "poc", "exploit code", "public exploit"]
 
 CATEGORIES = {
-    "breach": ["breach", "breaches", "data leak", "leaked", "stolen", "steal", "steals",
-               "stealing", "ransomware", "datenleck", "datenpanne", "cyberangriff"],
+    "breach": ["breach", "breaches", "data leak", "leaked", "ransomware",
+               "datenleck", "datenpanne", "cyberangriff"],
     "vulnerability": ["flaw", "flaws", "vulnerability", "vulnerabilities", "cve",
                       "schwachstelle", "schwachstellen", "sicherheitslücke", "sicherheitslücken",
                       "lücke", "lücken", "leck",
@@ -25,7 +25,8 @@ CATEGORIES = {
     "patch": ["patch", "patches", "patched", "fix", "fixes", "fixed", "update", "updates",
               "patchday", "sicherheitsupdate", "stopft", "aktualisieren"],
     "threats": ["phishing", "malware", "campaign", "campaigns", "hijack", "hijacks", "hijacked",
-                "botnet", "spyware", "infostealer", "backdoor", "seizes", "seized"],
+                "botnet", "spyware", "infostealer", "backdoor", "seizes", "seized",
+                "stolen", "steal", "steals", "stealing"],
 }
 
 
